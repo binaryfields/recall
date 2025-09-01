@@ -25,3 +25,7 @@ pub fn memory_tooltip(mem: &Snapshot, pressure: &str) -> String {
 fn gib(bytes: u64) -> String {
     format!("{:.1} G", bytes as f64 / GIB)
 }
+
+pub fn gib_compact(bytes: u64) -> String {
+    format!("{:.1}G", bytes as f64 / GIB)
+}

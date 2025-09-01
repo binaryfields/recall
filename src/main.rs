@@ -6,6 +6,7 @@ use tray_icon::menu::MenuEvent;
 use crate::app::App;
 
 mod app;
+mod config;
 mod format;
 mod macos;
 mod stats;
@@ -32,7 +33,7 @@ fn main() {
             }
             Event::UserEvent(menu_event) => {
                 if let Some(app) = app.as_mut()
-                    && app.dispatch(menu_event.id())
+                    && app.handle_menu(menu_event.id()).is_break()
                 {
                     *control_flow = ControlFlow::Exit;
                     return;
