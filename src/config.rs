@@ -9,6 +9,7 @@ pub struct Config {
     #[serde(skip)]
     path: Option<PathBuf>,
     pub readout: Readout,
+    pub memory: MemoryMetric,
 }
 
 impl Config {
@@ -72,6 +73,23 @@ impl Readout {
     }
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum MemoryMetric {
+    #[default]
+    Footprint,
+    Rss,
+}
+
+impl MemoryMetric {
+    pub fn toggled(self) -> Self {
+        match self {
+            MemoryMetric::Footprint => MemoryMetric::Rss,
+            MemoryMetric::Rss => MemoryMetric::Footprint,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -111,11 +129,13 @@ mod tests {
         let config = Config {
             path: Some(target.clone()),
             readout: Readout::Absolute,
+            memory: MemoryMetric::Rss,
         };
         config.save();
         assert!(target.exists());
         assert!(!target.with_extension("json.tmp").exists());
         let reloaded = Config::read(&target);
         assert!(reloaded.readout == Readout::Absolute);
+        assert!(reloaded.memory == MemoryMetric::Rss);
     }
 }

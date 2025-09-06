@@ -1,8 +1,12 @@
 use std::ffi::c_void;
+use std::mem::MaybeUninit;
 use std::ptr;
 
-use objc2::MainThreadMarker;
-use objc2_app_kit::{NSFont, NSFontWeightRegular};
+use objc2::rc::Retained;
+use objc2::runtime::AnyClass;
+use objc2::{AllocAnyThread, MainThreadMarker};
+use objc2_app_kit::{NSFont, NSFontWeightRegular, NSMenu, NSMenuItemBadge, NSRunningApplication};
+use objc2_foundation::NSString;
 use tray_icon::TrayIcon;
 
 pub fn set_monospaced_font(tray: &TrayIcon) {
@@ -13,6 +17,27 @@ pub fn set_monospaced_font(tray: &TrayIcon) {
     let size = NSFont::systemFontSize();
     let font = NSFont::monospacedDigitSystemFontOfSize_weight(size, unsafe { NSFontWeightRegular });
     button.setFont(Some(&font));
+}
+
+fn status_menu(tray: &TrayIcon) -> Option<Retained<NSMenu>> {
+    tray.ns_status_item()?.menu(MainThreadMarker::new()?)
+}
+
+pub fn set_process_badges(tray: &TrayIcon, badges: &[String]) {
+    if AnyClass::get(c"NSMenuItemBadge").is_none() {
+        return;
+    }
+    let Some(menu) = status_menu(tray) else {
+        return;
+    };
+    for (index, text) in badges.iter().enumerate() {
+        let Some(item) = menu.itemAtIndex(index as isize) else {
+            break;
+        };
+        let badge =
+            NSMenuItemBadge::initWithString(NSMenuItemBadge::alloc(), &NSString::from_str(text));
+        item.setBadge(Some(&badge));
+    }
 }
 
 pub fn pressure_level() -> &'static str {
@@ -34,4 +59,24 @@ pub fn pressure_level() -> &'static str {
         (0, 4) => "Critical",
         _ => "Unknown",
     }
+}
+
+pub fn phys_footprint_for_pid(pid: libc::pid_t) -> Option<u64> {
+    let mut info = MaybeUninit::<libc::rusage_info_v2>::uninit();
+    let rc = unsafe {
+        libc::proc_pid_rusage(
+            pid,
+            libc::RUSAGE_INFO_V2,
+            info.as_mut_ptr().cast::<libc::rusage_info_t>(),
+        )
+    };
+    if rc != 0 {
+        return None;
+    }
+    Some(unsafe { info.assume_init() }.ri_phys_footprint)
+}
+
+pub fn app_name_for_pid(pid: libc::pid_t) -> Option<String> {
+    let app = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)?;
+    app.localizedName().map(|name| name.to_string())
 }
