@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use tray_icon::menu::{Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
+use tray_icon::menu::{CheckMenuItem, Menu, MenuId, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
 use crate::config::{MemoryMetric, Readout};
@@ -15,6 +15,7 @@ pub struct Tray {
     process_items: Vec<MenuItem>,
     format_toggle: MenuItem,
     memory_toggle: MenuItem,
+    login_item: CheckMenuItem,
 }
 
 impl Tray {
@@ -26,12 +27,15 @@ impl Tray {
         actions.insert(format_toggle.id().clone(), Action::ToggleFormat);
         let memory_toggle = MenuItem::new(metric_label(memory), true, None);
         actions.insert(memory_toggle.id().clone(), Action::ToggleMemory);
+        let login_item = CheckMenuItem::new("Start at Login", true, macos::login_enabled(), None);
+        actions.insert(login_item.id().clone(), Action::ToggleLogin);
         let quit = MenuItem::new("Quit Recall", true, None);
         actions.insert(quit.id().clone(), Action::Quit);
 
         let settings = Submenu::new("Settings", true);
         let _ = settings.append(&format_toggle);
         let _ = settings.append(&memory_toggle);
+        let _ = settings.append(&login_item);
 
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&settings);
@@ -52,6 +56,7 @@ impl Tray {
             process_items: Vec::new(),
             format_toggle,
             memory_toggle,
+            login_item,
         }
     }
 
@@ -82,6 +87,10 @@ impl Tray {
         self.actions.get(id)
     }
 
+    pub fn set_login_checked(&self, checked: bool) {
+        self.login_item.set_checked(checked);
+    }
+
     pub fn set_readout(&self, readout: Readout) {
         self.format_toggle.set_text(readout_label(readout));
     }
@@ -94,6 +103,7 @@ impl Tray {
 pub enum Action {
     ToggleFormat,
     ToggleMemory,
+    ToggleLogin,
     Quit,
 }
 

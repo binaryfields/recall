@@ -73,6 +73,7 @@ impl App {
         match self.tray.action(id) {
             Some(Action::ToggleFormat) => self.toggle_format(),
             Some(Action::ToggleMemory) => self.toggle_memory(),
+            Some(Action::ToggleLogin) => self.toggle_login(),
             Some(Action::Quit) => return ControlFlow::Break(()),
             None => {}
         }
@@ -91,5 +92,10 @@ impl App {
         self.config.save();
         self.tray.set_memory(self.config.memory);
         self.refresh_processes();
+    }
+
+    fn toggle_login(&mut self) {
+        let enabled = macos::set_login_enabled(!macos::login_enabled());
+        self.tray.set_login_checked(enabled);
     }
 }

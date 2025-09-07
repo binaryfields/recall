@@ -7,7 +7,38 @@ use objc2::runtime::AnyClass;
 use objc2::{AllocAnyThread, MainThreadMarker};
 use objc2_app_kit::{NSFont, NSFontWeightRegular, NSMenu, NSMenuItemBadge, NSRunningApplication};
 use objc2_foundation::NSString;
+use objc2_service_management::{SMAppService, SMAppServiceStatus};
 use tray_icon::TrayIcon;
+
+pub fn login_enabled() -> bool {
+    let status = unsafe { login_service().status() };
+    status == SMAppServiceStatus::Enabled
+}
+
+fn login_service() -> Retained<SMAppService> {
+    unsafe { SMAppService::mainAppService() }
+}
+
+pub fn set_login_enabled(enable: bool) -> bool {
+    let service = login_service();
+    let result = unsafe {
+        if enable {
+            service.registerAndReturnError()
+        } else {
+            service.unregisterAndReturnError()
+        }
+    };
+    if let Err(err) = result {
+        let verb = if enable { "enable" } else { "disable" };
+        eprintln!("recall: could not {verb} start-at-login: {err}");
+    }
+
+    let status = unsafe { service.status() };
+    if enable && status == SMAppServiceStatus::RequiresApproval {
+        unsafe { SMAppService::openSystemSettingsLoginItems() };
+    }
+    status == SMAppServiceStatus::Enabled
+}
 
 pub fn set_monospaced_font(tray: &TrayIcon) {
     let Some(button) = MainThreadMarker::new().and_then(|mtm| tray.ns_status_item()?.button(mtm))
