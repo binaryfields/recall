@@ -1,3 +1,4 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -8,8 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct Config {
     #[serde(skip)]
     path: Option<PathBuf>,
-    pub readout: Readout,
-    pub memory: MemoryMetric,
+    plugins: BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
 }
 
 impl Config {
@@ -36,6 +36,15 @@ impl Config {
         }
     }
 
+    pub fn flag(&self, plugin: &str, flag: &str) -> Option<bool> {
+        self.plugins.get(plugin)?.get(flag)?.as_bool()
+    }
+
+    pub fn set_flag(&mut self, plugin: &str, flag: &str, on: bool) {
+        let section = self.plugins.entry(plugin.to_string()).or_default();
+        section.insert(flag.to_string(), on.into());
+    }
+
     pub fn save(&self) {
         let Some(path) = &self.path else {
             return;
@@ -52,40 +61,6 @@ impl Config {
         let tmp = path.with_extension("json.tmp");
         if fs::write(&tmp, json).is_ok() {
             let _ = fs::rename(&tmp, path);
-        }
-    }
-}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Readout {
-    #[default]
-    Percent,
-    Absolute,
-}
-
-impl Readout {
-    pub fn toggled(self) -> Self {
-        match self {
-            Readout::Percent => Readout::Absolute,
-            Readout::Absolute => Readout::Percent,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MemoryMetric {
-    #[default]
-    Footprint,
-    Rss,
-}
-
-impl MemoryMetric {
-    pub fn toggled(self) -> Self {
-        match self {
-            MemoryMetric::Footprint => MemoryMetric::Rss,
-            MemoryMetric::Rss => MemoryMetric::Footprint,
         }
     }
 }
@@ -123,19 +98,32 @@ mod tests {
     }
 
     #[test]
+    fn set_flag_keeps_unknown_keys() {
+        let mut config: Config =
+            serde_json::from_str(r#"{"plugins":{"memory":{"future_knob":42,"rss":false}}}"#)
+                .unwrap();
+        config.set_flag("memory", "rss", true);
+        assert_eq!(
+            serde_json::to_value(&config.plugins["memory"]).unwrap(),
+            serde_json::json!({"future_knob": 42, "rss": true})
+        );
+        assert_eq!(config.flag("memory", "rss"), Some(true));
+        assert_eq!(config.flag("cpu", "enabled"), None);
+    }
+
+    #[test]
     fn save_then_read() {
         let dir = TempDir::new("save-then-read");
         let target = dir.0.join("nested").join("config.json");
-        let config = Config {
+        let mut config = Config {
             path: Some(target.clone()),
-            readout: Readout::Absolute,
-            memory: MemoryMetric::Rss,
+            ..Default::default()
         };
+        config.set_flag("memory", "enabled", false);
         config.save();
         assert!(target.exists());
         assert!(!target.with_extension("json.tmp").exists());
         let reloaded = Config::read(&target);
-        assert!(reloaded.readout == Readout::Absolute);
-        assert!(reloaded.memory == MemoryMetric::Rss);
+        assert!(reloaded.plugins == config.plugins);
     }
 }

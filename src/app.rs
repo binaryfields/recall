@@ -3,35 +3,43 @@ use std::time::{Duration, Instant};
 
 use tray_icon::menu::MenuId;
 
-use crate::config::{Config, Readout};
-use crate::format;
+use crate::config::Config;
 use crate::macos;
-use crate::stats::Stats;
+use crate::plugins::{self, Output, Plugin};
 use crate::tray::{Action, Tray};
-
-const PROCESS_EVERY: u64 = 5;
 
 const TICK: Duration = Duration::from_secs(2);
 
-const TOP_PROCESSES: usize = 8;
-
 pub struct App {
     tray: Tray,
-    stats: Stats,
     config: Config,
+    plugins: Vec<PluginSlot>,
     next_tick: Instant,
-    tick_count: u64,
 }
 
 impl App {
     pub fn new() -> Self {
         let config = Config::load();
+        let mut loaded = plugins::all();
+        for plugin in &mut loaded {
+            for flag in plugin.flags() {
+                let on = config.flag(plugin.id(), flag.id).unwrap_or(flag.on);
+                plugin.set_flag(flag.id, on);
+            }
+        }
+        let tray = Tray::new(&loaded);
+        let plugins = loaded
+            .into_iter()
+            .map(|plugin| PluginSlot {
+                plugin,
+                output: Output::default(),
+            })
+            .collect();
         let mut app = Self {
-            tray: Tray::new(config.readout, config.memory),
-            stats: Stats::new(),
+            tray,
             config,
+            plugins,
             next_tick: Instant::now(),
-            tick_count: 0,
         };
         app.tick();
         app
@@ -42,37 +50,45 @@ impl App {
     }
 
     pub fn tick(&mut self) {
-        self.refresh_display();
-        if self.tick_count.is_multiple_of(PROCESS_EVERY) {
-            self.refresh_processes();
-        }
-        self.tick_count += 1;
+        self.sample_all();
         self.next_tick = Instant::now() + TICK;
     }
 
-    fn refresh_display(&mut self) {
-        let mem = self.stats.refresh_memory();
-        let pressure = macos::pressure_level();
-        let title = match self.config.readout {
-            Readout::Percent => format::percent(mem.used, mem.total),
-            Readout::Absolute => format::gib_compact(mem.used),
-        };
-        self.tray.set_title(title);
-        self.tray
-            .set_tooltip(format::memory_tooltip(&mem, pressure));
+    fn sample_all(&mut self) {
+        for plugin in 0..self.plugins.len() {
+            self.sample_slot(plugin);
+        }
+        self.render_status();
     }
 
-    fn refresh_processes(&mut self) {
-        let mut procs = self.stats.refresh_processes(self.config.memory);
-        procs.sort_unstable_by_key(|p| std::cmp::Reverse(p.memory));
-        procs.truncate(TOP_PROCESSES);
-        self.tray.set_processes(&procs);
+    fn sample_slot(&mut self, plugin: usize) {
+        let slot = &mut self.plugins[plugin];
+        let output = slot.plugin.sample();
+        slot.output.segment = output.segment;
+        slot.output.tooltip_lines = output.tooltip_lines;
+        if let Some(items) = output.menu_items {
+            self.tray.set_section(plugin, items);
+        }
+    }
+
+    fn render_status(&self) {
+        let mut segments = Vec::new();
+        let mut blocks = Vec::new();
+        for slot in &self.plugins {
+            if let Some(segment) = &slot.output.segment {
+                segments.push(segment.as_str());
+            }
+            if !slot.output.tooltip_lines.is_empty() {
+                blocks.push(slot.output.tooltip_lines.join("\n"));
+            }
+        }
+        self.tray.set_title(status_title(&segments));
+        self.tray.set_tooltip(blocks.join("\n\n"));
     }
 
     pub fn handle_menu(&mut self, id: &MenuId) -> ControlFlow<()> {
         match self.tray.action(id) {
-            Some(Action::ToggleFormat) => self.toggle_format(),
-            Some(Action::ToggleMemory) => self.toggle_memory(),
+            Some(Action::ToggleFlag(plugin, flag)) => self.toggle_flag(plugin, flag),
             Some(Action::ToggleLogin) => self.toggle_login(),
             Some(Action::Quit) => return ControlFlow::Break(()),
             None => {}
@@ -80,22 +96,35 @@ impl App {
         ControlFlow::Continue(())
     }
 
-    fn toggle_format(&mut self) {
-        self.config.readout = self.config.readout.toggled();
+    fn toggle_flag(&mut self, plugin: usize, flag: &str) {
+        let slot = &mut self.plugins[plugin];
+        let on = !slot
+            .plugin
+            .flags()
+            .iter()
+            .any(|known| known.id == flag && known.on);
+        slot.plugin.set_flag(flag, on);
+        self.config.set_flag(slot.plugin.id(), flag, on);
         self.config.save();
-        self.tray.set_readout(self.config.readout);
-        self.refresh_display();
-    }
-
-    fn toggle_memory(&mut self) {
-        self.config.memory = self.config.memory.toggled();
-        self.config.save();
-        self.tray.set_memory(self.config.memory);
-        self.refresh_processes();
+        self.sample_slot(plugin);
+        self.render_status();
     }
 
     fn toggle_login(&mut self) {
         let enabled = macos::set_login_enabled(!macos::login_enabled());
         self.tray.set_login_checked(enabled);
+    }
+}
+
+struct PluginSlot {
+    plugin: Box<dyn Plugin>,
+    output: Output,
+}
+
+fn status_title(segments: &[&str]) -> String {
+    if segments.is_empty() {
+        "\u{2026}".to_string()
+    } else {
+        segments.join(" ")
     }
 }

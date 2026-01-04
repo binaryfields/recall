@@ -54,20 +54,21 @@ fn status_menu(tray: &TrayIcon) -> Option<Retained<NSMenu>> {
     tray.ns_status_item()?.menu(MainThreadMarker::new()?)
 }
 
-pub fn set_process_badges(tray: &TrayIcon, badges: &[String]) {
+pub fn set_menu_badges(tray: &TrayIcon, badges: &[Option<&str>]) {
     if AnyClass::get(c"NSMenuItemBadge").is_none() {
         return;
     }
     let Some(menu) = status_menu(tray) else {
         return;
     };
-    for (index, text) in badges.iter().enumerate() {
-        let Some(item) = menu.itemAtIndex(index as isize) else {
+    for (row, text) in badges.iter().enumerate() {
+        let Some(item) = menu.itemAtIndex(row as isize) else {
             break;
         };
-        let badge =
-            NSMenuItemBadge::initWithString(NSMenuItemBadge::alloc(), &NSString::from_str(text));
-        item.setBadge(Some(&badge));
+        let badge = text.map(|text| {
+            NSMenuItemBadge::initWithString(NSMenuItemBadge::alloc(), &NSString::from_str(text))
+        });
+        item.setBadge(badge.as_deref());
     }
 }
 

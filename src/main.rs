@@ -9,7 +9,7 @@ mod app;
 mod config;
 mod format;
 mod macos;
-mod stats;
+mod plugins;
 mod tray;
 
 fn main() {
