@@ -8,6 +8,10 @@ pub fn percent(used: u64, total: u64) -> String {
     format!("{}%", (used * 100 + total / 2) / total)
 }
 
+pub fn percent_f64(used: f64) -> String {
+    format!("{used:.0}%")
+}
+
 pub fn gib(bytes: u64) -> String {
     format!("{:.1} G", bytes as f64 / GIB)
 }

@@ -1,8 +1,10 @@
+pub mod cpu;
 pub mod memory;
 
 pub trait Plugin {
     fn id(&self) -> &'static str;
     fn label(&self) -> &'static str;
+    fn prefix(&self) -> &'static str;
     fn sample(&mut self) -> Output;
     fn flags(&self) -> Vec<Flag> {
         Vec::new()
@@ -30,5 +32,5 @@ pub struct Flag {
 }
 
 pub fn all() -> Vec<Box<dyn Plugin>> {
-    vec![Box::new(memory::Memory::new())]
+    vec![Box::new(memory::Memory::new()), Box::new(cpu::Cpu::new())]
 }

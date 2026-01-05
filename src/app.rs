@@ -76,7 +76,7 @@ impl App {
         let mut blocks = Vec::new();
         for slot in &self.plugins {
             if let Some(segment) = &slot.output.segment {
-                segments.push(segment.as_str());
+                segments.push((slot.plugin.prefix(), segment.as_str()));
             }
             if !slot.output.tooltip_lines.is_empty() {
                 blocks.push(slot.output.tooltip_lines.join("\n"));
@@ -121,10 +121,14 @@ struct PluginSlot {
     output: Output,
 }
 
-fn status_title(segments: &[&str]) -> String {
+fn status_title(segments: &[(&str, &str)]) -> String {
     if segments.is_empty() {
         "\u{2026}".to_string()
     } else {
-        segments.join(" ")
+        segments
+            .iter()
+            .map(|(prefix, segment)| format!("{prefix}{segment}"))
+            .collect::<Vec<_>>()
+            .join(" ")
     }
 }

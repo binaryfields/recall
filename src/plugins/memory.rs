@@ -70,6 +70,10 @@ impl Plugin for Memory {
         "Memory"
     }
 
+    fn prefix(&self) -> &'static str {
+        "M"
+    }
+
     fn sample(&mut self) -> Output {
         self.system.refresh_memory();
         let total = self.system.total_memory();
