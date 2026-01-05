@@ -43,6 +43,10 @@ impl Plugin for Cpu {
             menu_items: None,
         }
     }
+
+    fn invalidate(&mut self) {
+        self.has_baseline = false;
+    }
 }
 
 #[cfg(test)]

@@ -111,6 +111,10 @@ impl Plugin for Memory {
         }
     }
 
+    fn invalidate(&mut self) {
+        self.samples = 0;
+    }
+
     fn flags(&self) -> Vec<Flag> {
         vec![
             Flag {

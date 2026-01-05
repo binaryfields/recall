@@ -6,6 +6,7 @@ pub trait Plugin {
     fn label(&self) -> &'static str;
     fn prefix(&self) -> &'static str;
     fn sample(&mut self) -> Output;
+    fn invalidate(&mut self) {}
     fn flags(&self) -> Vec<Flag> {
         Vec::new()
     }

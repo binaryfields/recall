@@ -18,15 +18,22 @@ pub struct Tray {
 }
 
 impl Tray {
-    pub fn new(plugins: &[Box<dyn Plugin>]) -> Self {
+    pub fn new<'a>(plugins: impl Iterator<Item = (&'a dyn Plugin, bool)>) -> Self {
         let menu = Menu::new();
         let mut actions = HashMap::new();
 
         let mut sections = Vec::new();
         let settings_menu = Submenu::new("Settings", true);
-        for (plugin, source) in plugins.iter().enumerate() {
+        for (plugin, (source, enabled)) in plugins.enumerate() {
             let submenu = Submenu::new(source.label(), true);
-            for flag in source.flags() {
+            let check = CheckMenuItem::new("Enabled", true, enabled, None);
+            actions.insert(check.id().clone(), Action::TogglePlugin(plugin));
+            let _ = submenu.append(&check);
+            let flags = source.flags();
+            if !flags.is_empty() {
+                let _ = submenu.append(&PredefinedMenuItem::separator());
+            }
+            for flag in flags {
                 let check = CheckMenuItem::new(flag.label, true, flag.on, None);
                 actions.insert(check.id().clone(), Action::ToggleFlag(plugin, flag.id));
                 let _ = submenu.append(&check);
@@ -107,6 +114,7 @@ impl Tray {
 #[derive(Clone, Copy)]
 pub enum Action {
     ToggleFlag(usize, &'static str),
+    TogglePlugin(usize),
     ToggleLogin,
     Quit,
 }
