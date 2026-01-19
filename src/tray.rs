@@ -46,9 +46,13 @@ impl Tray {
         actions.insert(login_item.id().clone(), Action::ToggleLogin);
         let _ = settings_menu.append(&login_item);
 
+        let refresh = MenuItem::new("Refresh Now", true, None);
+        actions.insert(refresh.id().clone(), Action::RefreshNow);
+
         let quit = MenuItem::new("Quit Recall", true, None);
         actions.insert(quit.id().clone(), Action::Quit);
 
+        let _ = menu.append(&refresh);
         let _ = menu.append(&settings_menu);
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&quit);
@@ -116,5 +120,6 @@ pub enum Action {
     ToggleFlag(usize, &'static str),
     TogglePlugin(usize),
     ToggleLogin,
+    RefreshNow,
     Quit,
 }

@@ -104,6 +104,7 @@ impl App {
             Some(Action::ToggleFlag(plugin, flag)) => self.toggle_flag(plugin, flag),
             Some(Action::TogglePlugin(plugin)) => self.toggle_plugin(plugin),
             Some(Action::ToggleLogin) => self.toggle_login(),
+            Some(Action::RefreshNow) => self.refresh_now(),
             Some(Action::Quit) => return ControlFlow::Break(()),
             None => {}
         }
@@ -143,6 +144,13 @@ impl App {
     fn toggle_login(&mut self) {
         let enabled = macos::set_login_enabled(!macos::login_enabled());
         self.tray.set_login_checked(enabled);
+    }
+
+    fn refresh_now(&mut self) {
+        for slot in &mut self.plugins {
+            slot.plugin.invalidate();
+        }
+        self.sample_all();
     }
 }
 
