@@ -1,13 +1,17 @@
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
 use std::process::Command;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
+use block2::RcBlock;
 use objc2::rc::Retained;
 use objc2::runtime::AnyClass;
 use objc2::{AllocAnyThread, MainThreadMarker};
-use objc2_app_kit::{NSFont, NSFontWeightRegular, NSMenu, NSMenuItemBadge, NSRunningApplication};
-use objc2_foundation::NSString;
+use objc2_app_kit::{
+    NSFont, NSFontWeightRegular, NSMenu, NSMenuDidBeginTrackingNotification, NSMenuItemBadge,
+    NSRunningApplication,
+};
+use objc2_foundation::{NSNotification, NSNotificationCenter, NSString};
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 use tray_icon::TrayIcon;
 
@@ -53,6 +57,21 @@ pub fn set_monospaced_font(tray: &TrayIcon) {
     let size = NSFont::systemFontSize();
     let font = NSFont::monospacedDigitSystemFontOfSize_weight(size, unsafe { NSFontWeightRegular });
     button.setFont(Some(&font));
+}
+
+pub fn observe_menu_open(tray: &TrayIcon, on_open: Box<dyn Fn()>) {
+    let Some(menu) = status_menu(tray) else {
+        return;
+    };
+    let block = RcBlock::new(move |_: NonNull<NSNotification>| on_open());
+    unsafe {
+        NSNotificationCenter::defaultCenter().addObserverForName_object_queue_usingBlock(
+            Some(NSMenuDidBeginTrackingNotification),
+            Some(&menu),
+            None,
+            &block,
+        )
+    };
 }
 
 fn status_menu(tray: &TrayIcon) -> Option<Retained<NSMenu>> {

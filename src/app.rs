@@ -19,7 +19,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(on_menu_open: Box<dyn Fn()>) -> Self {
         let config = Config::load();
         let plugins: Vec<PluginSlot> = plugins::all()
             .into_iter()
@@ -39,6 +39,7 @@ impl App {
             plugins
                 .iter()
                 .map(|slot| (slot.plugin.as_ref(), slot.enabled)),
+            on_menu_open,
         );
         let mut app = Self {
             tray,
@@ -68,18 +69,12 @@ impl App {
 
     fn sample_slot(&mut self, plugin: usize) {
         let slot = &mut self.plugins[plugin];
-        if !slot.enabled {
-            return;
-        }
-        let output = slot.plugin.sample();
-        slot.output.segment = output.segment;
-        slot.output.tooltip_lines = output.tooltip_lines;
-        if let Some(items) = output.menu_items {
-            self.tray.set_section(plugin, items);
+        if slot.enabled {
+            slot.output = slot.plugin.sample();
         }
     }
 
-    fn render_status(&self) {
+    fn render_status(&mut self) {
         let mut enabled = 0;
         let mut segments = Vec::new();
         let mut blocks = Vec::new();
@@ -97,6 +92,14 @@ impl App {
         }
         self.tray.set_title(status_title(&segments, enabled));
         self.tray.set_tooltip(blocks.join("\n\n"));
+    }
+
+    pub fn menu_will_open(&mut self) {
+        for (plugin, slot) in self.plugins.iter_mut().enumerate() {
+            if slot.enabled {
+                self.tray.set_section(plugin, slot.plugin.menu_will_open());
+            }
+        }
     }
 
     pub fn handle_menu(&mut self, id: &MenuId) -> ControlFlow<()> {

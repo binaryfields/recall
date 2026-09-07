@@ -40,7 +40,6 @@ impl Plugin for Cpu {
         Output {
             segment: Some(percent.clone()),
             tooltip_lines: vec![format!("CPU: {percent}")],
-            menu_items: None,
         }
     }
 

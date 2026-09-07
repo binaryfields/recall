@@ -54,39 +54,30 @@ impl Plugin for Claude {
     fn sample(&mut self) -> Output {
         self.fetch_if_due();
         self.samples += 1;
-
-        let shared = self.shared.lock().unwrap_or_else(|e| e.into_inner());
-        let fetched = match (&shared.fetched, &shared.last_ok) {
-            (Some(Err(UNREACHABLE)), Some((usage, at))) if at.elapsed() < MAX_STALE_AGE => {
-                Some(Ok(usage.clone()))
-            }
-            (fetched, _) => fetched.clone(),
-        };
-        drop(shared);
-
-        let (segment, tooltip_lines, items) = match fetched {
+        let (segment, tooltip_lines) = match self.view() {
             Some(Ok(usage)) => (
                 usage[0]
                     .as_ref()
                     .map(|w| format::percent_f64(w.used_percent)),
                 vec![usage_tooltip(&usage)],
-                usage_items(&usage),
             ),
-            Some(Err(reason)) => (
-                None,
-                vec![format!("Claude: {reason}")],
-                vec![Item {
-                    text: "Claude usage unavailable \u{2014} sign in with Claude Code".to_string(),
-                    badge: None,
-                }],
-            ),
-            None => (None, Vec::new(), Vec::new()),
+            Some(Err(reason)) => (None, vec![format!("Claude: {reason}")]),
+            None => (None, Vec::new()),
         };
-
         Output {
             segment: Some(segment.unwrap_or_else(|| PLACEHOLDER.to_string())),
             tooltip_lines,
-            menu_items: Some(items),
+        }
+    }
+
+    fn menu_will_open(&mut self) -> Vec<Item> {
+        match self.view() {
+            Some(Ok(usage)) => usage_items(&usage),
+            Some(Err(_)) => vec![Item {
+                text: "Claude usage unavailable \u{2014} sign in with Claude Code".to_string(),
+                badge: None,
+            }],
+            None => Vec::new(),
         }
     }
 
@@ -112,6 +103,16 @@ impl Claude {
             shared.fetched = Some(fetched);
             shared.in_flight = false;
         });
+    }
+
+    fn view(&self) -> Fetched {
+        let shared = self.shared.lock().unwrap_or_else(|e| e.into_inner());
+        match (&shared.fetched, &shared.last_ok) {
+            (Some(Err(UNREACHABLE)), Some((usage, at))) if at.elapsed() < MAX_STALE_AGE => {
+                Some(Ok(usage.clone()))
+            }
+            (fetched, _) => fetched.clone(),
+        }
     }
 }
 

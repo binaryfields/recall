@@ -1,3 +1,6 @@
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use tao::event::{Event, StartCause};
 use tao::event_loop::{ControlFlow, EventLoopBuilder};
 use tao::platform::macos::{ActivationPolicy, EventLoopExtMacOS};
@@ -21,18 +24,21 @@ fn main() {
         let _ = proxy.send_event(event);
     }));
 
-    let mut app: Option<App> = None;
+    let app: Rc<RefCell<Option<App>>> = Rc::new(RefCell::new(None));
 
     event_loop.run(move |event, _, control_flow| {
+        let mut slot = app.borrow_mut();
         match event {
-            Event::NewEvents(StartCause::Init) => app = Some(App::new()),
+            Event::NewEvents(StartCause::Init) => {
+                *slot = Some(App::new(menu_open_handler(Rc::clone(&app))));
+            }
             Event::NewEvents(StartCause::ResumeTimeReached { .. }) => {
-                if let Some(app) = app.as_mut() {
+                if let Some(app) = slot.as_mut() {
                     app.tick();
                 }
             }
             Event::UserEvent(menu_event) => {
-                if let Some(app) = app.as_mut()
+                if let Some(app) = slot.as_mut()
                     && app.handle_menu(menu_event.id()).is_break()
                 {
                     *control_flow = ControlFlow::Exit;
@@ -41,9 +47,19 @@ fn main() {
             }
             _ => {}
         }
-        *control_flow = match app.as_ref() {
+        *control_flow = match slot.as_ref() {
             Some(app) => ControlFlow::WaitUntil(app.next_tick()),
             None => ControlFlow::Wait,
         };
     });
+}
+
+fn menu_open_handler(app: Rc<RefCell<Option<App>>>) -> Box<dyn Fn()> {
+    Box::new(move || {
+        if let Ok(mut slot) = app.try_borrow_mut()
+            && let Some(app) = slot.as_mut()
+        {
+            app.menu_will_open();
+        }
+    })
 }

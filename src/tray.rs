@@ -15,10 +15,15 @@ pub struct Tray {
     sections: Vec<Vec<Item>>,
     rows: Vec<Box<dyn IsMenuItem>>,
     login_item: CheckMenuItem,
+    title: String,
+    tooltip: String,
 }
 
 impl Tray {
-    pub fn new<'a>(plugins: impl Iterator<Item = (&'a dyn Plugin, bool)>) -> Self {
+    pub fn new<'a>(
+        plugins: impl Iterator<Item = (&'a dyn Plugin, bool)>,
+        on_menu_open: Box<dyn Fn()>,
+    ) -> Self {
         let menu = Menu::new();
         let mut actions = HashMap::new();
 
@@ -57,12 +62,14 @@ impl Tray {
         let _ = menu.append(&PredefinedMenuItem::separator());
         let _ = menu.append(&quit);
 
+        let title = "\u{2026}".to_string();
         let icon = TrayIconBuilder::new()
-            .with_title("\u{2026}")
+            .with_title(&title)
             .with_menu(Box::new(menu.clone()))
             .build()
             .expect("create tray icon");
         macos::set_monospaced_font(&icon);
+        macos::observe_menu_open(&icon, on_menu_open);
 
         Self {
             icon,
@@ -71,15 +78,25 @@ impl Tray {
             sections,
             rows: Vec::new(),
             login_item,
+            title,
+            tooltip: String::new(),
         }
     }
 
-    pub fn set_title(&self, title: String) {
-        self.icon.set_title(Some(title));
+    pub fn set_title(&mut self, title: String) {
+        if self.title == title {
+            return;
+        }
+        self.icon.set_title(Some(&title));
+        self.title = title;
     }
 
-    pub fn set_tooltip(&self, tooltip: String) {
-        let _ = self.icon.set_tooltip(Some(tooltip));
+    pub fn set_tooltip(&mut self, tooltip: String) {
+        if self.tooltip == tooltip {
+            return;
+        }
+        let _ = self.icon.set_tooltip(Some(&tooltip));
+        self.tooltip = tooltip;
     }
 
     pub fn set_section(&mut self, plugin: usize, items: Vec<Item>) {

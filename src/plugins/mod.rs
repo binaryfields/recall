@@ -7,6 +7,9 @@ pub trait Plugin {
     fn label(&self) -> &'static str;
     fn prefix(&self) -> &'static str;
     fn sample(&mut self) -> Output;
+    fn menu_will_open(&mut self) -> Vec<Item> {
+        Vec::new()
+    }
     fn invalidate(&mut self) {}
     fn flags(&self) -> Vec<Flag> {
         Vec::new()
@@ -18,7 +21,6 @@ pub trait Plugin {
 pub struct Output {
     pub segment: Option<String>,
     pub tooltip_lines: Vec<String>,
-    pub menu_items: Option<Vec<Item>>,
 }
 
 #[derive(PartialEq)]
