@@ -1,3 +1,4 @@
+pub mod claude;
 pub mod cpu;
 pub mod memory;
 
@@ -33,5 +34,9 @@ pub struct Flag {
 }
 
 pub fn all() -> Vec<Box<dyn Plugin>> {
-    vec![Box::new(memory::Memory::new()), Box::new(cpu::Cpu::new())]
+    vec![
+        Box::new(memory::Memory::new()),
+        Box::new(cpu::Cpu::new()),
+        Box::new(claude::Claude::new()),
+    ]
 }

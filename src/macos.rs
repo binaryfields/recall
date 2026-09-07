@@ -1,5 +1,6 @@
 use std::ffi::c_void;
 use std::mem::MaybeUninit;
+use std::process::Command;
 use std::ptr;
 
 use objc2::rc::Retained;
@@ -9,6 +10,8 @@ use objc2_app_kit::{NSFont, NSFontWeightRegular, NSMenu, NSMenuItemBadge, NSRunn
 use objc2_foundation::NSString;
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 use tray_icon::TrayIcon;
+
+// ---- Login ----
 
 pub fn login_enabled() -> bool {
     let status = unsafe { login_service().status() };
@@ -39,6 +42,8 @@ pub fn set_login_enabled(enable: bool) -> bool {
     }
     status == SMAppServiceStatus::Enabled
 }
+
+// ---- Status ----
 
 pub fn set_monospaced_font(tray: &TrayIcon) {
     let Some(button) = MainThreadMarker::new().and_then(|mtm| tray.ns_status_item()?.button(mtm))
@@ -71,6 +76,8 @@ pub fn set_menu_badges(tray: &TrayIcon, badges: &[Option<&str>]) {
         item.setBadge(badge.as_deref());
     }
 }
+
+// ---- Memory ----
 
 pub fn pressure_level() -> &'static str {
     let name = c"kern.memorystatus_vm_pressure_level";
@@ -111,4 +118,27 @@ pub fn phys_footprint_for_pid(pid: libc::pid_t) -> Option<u64> {
 pub fn app_name_for_pid(pid: libc::pid_t) -> Option<String> {
     let app = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)?;
     app.localizedName().map(|name| name.to_string())
+}
+
+// ---- Credentials ----
+
+pub fn claude_access_token() -> Option<String> {
+    let output = Command::new("/usr/bin/security")
+        .args([
+            "find-generic-password",
+            "-s",
+            "Claude Code-credentials",
+            "-w",
+        ])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let json: serde_json::Value = serde_json::from_slice(&output.stdout).ok()?;
+    let token = json
+        .pointer("/claudeAiOauth/accessToken")
+        .or_else(|| json.get("accessToken"))?
+        .as_str()?;
+    (!token.is_empty()).then(|| token.to_string())
 }
