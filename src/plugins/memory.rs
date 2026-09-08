@@ -1,4 +1,4 @@
-use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System};
+use sysinfo::System;
 
 use crate::format;
 use crate::macos;
@@ -66,36 +66,27 @@ impl Plugin for Memory {
     }
 
     fn menu_will_open(&mut self) -> Vec<Item> {
-        self.system.refresh_processes_specifics(
-            ProcessesToUpdate::All,
-            true,
-            ProcessRefreshKind::nothing().with_memory(),
-        );
-        let mut procs: Vec<_> = self
-            .system
-            .processes()
-            .values()
-            .map(|process| {
-                let pid = process.pid().as_u32() as libc::pid_t;
-                let memory = if self.rss {
-                    process.memory()
+        let mut procs: Vec<(libc::pid_t, u64)> = macos::pids()
+            .into_iter()
+            .filter_map(|pid| {
+                let memory = macos::memory_for_pid(pid)?;
+                let bytes = if self.rss {
+                    memory.resident
                 } else {
-                    macos::phys_footprint_for_pid(pid).unwrap_or_else(|| process.memory())
+                    memory.footprint
                 };
-                (pid, memory, process)
+                Some((pid, bytes))
             })
             .collect();
-        procs.sort_unstable_by_key(|&(_, memory, _)| std::cmp::Reverse(memory));
+        procs.sort_unstable_by_key(|&(_, bytes)| std::cmp::Reverse(bytes));
         procs.truncate(TOP_PROCESSES);
         procs
             .into_iter()
-            .map(|(pid, memory, process)| {
-                let name = macos::app_name_for_pid(pid)
-                    .unwrap_or_else(|| process.name().to_string_lossy().into_owned());
-                Item {
-                    text: name,
-                    badge: Some(format::scaled(memory)),
-                }
+            .map(|(pid, bytes)| Item {
+                text: macos::app_name_for_pid(pid)
+                    .or_else(|| macos::process_name(pid))
+                    .unwrap_or_else(|| pid.to_string()),
+                badge: Some(format::scaled(bytes)),
             })
             .collect()
     }

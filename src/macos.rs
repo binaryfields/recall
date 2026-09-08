@@ -15,6 +15,14 @@ use objc2_foundation::{NSNotification, NSNotificationCenter, NSString};
 use objc2_service_management::{SMAppService, SMAppServiceStatus};
 use tray_icon::TrayIcon;
 
+const PID_LIST_HEADROOM: usize = 64;
+const PROC_NAME_CAPACITY: usize = 256;
+
+pub struct ProcessMemory {
+    pub footprint: u64,
+    pub resident: u64,
+}
+
 // ---- Login ----
 
 pub fn login_enabled() -> bool {
@@ -119,7 +127,20 @@ pub fn pressure_level() -> &'static str {
     }
 }
 
-pub fn phys_footprint_for_pid(pid: libc::pid_t) -> Option<u64> {
+pub fn pids() -> Vec<libc::pid_t> {
+    let count = unsafe { libc::proc_listallpids(ptr::null_mut(), 0) };
+    if count <= 0 {
+        return Vec::new();
+    }
+    let mut pids = vec![0 as libc::pid_t; count as usize + PID_LIST_HEADROOM];
+    let bytes = (pids.len() * size_of::<libc::pid_t>()) as libc::c_int;
+    let filled = unsafe { libc::proc_listallpids(pids.as_mut_ptr().cast::<c_void>(), bytes) };
+    pids.truncate(filled.max(0) as usize);
+    pids.retain(|&pid| pid > 0);
+    pids
+}
+
+pub fn memory_for_pid(pid: libc::pid_t) -> Option<ProcessMemory> {
     let mut info = MaybeUninit::<libc::rusage_info_v2>::uninit();
     let rc = unsafe {
         libc::proc_pid_rusage(
@@ -131,12 +152,32 @@ pub fn phys_footprint_for_pid(pid: libc::pid_t) -> Option<u64> {
     if rc != 0 {
         return None;
     }
-    Some(unsafe { info.assume_init() }.ri_phys_footprint)
+    let info = unsafe { info.assume_init() };
+    Some(ProcessMemory {
+        footprint: info.ri_phys_footprint,
+        resident: info.ri_resident_size,
+    })
 }
 
 pub fn app_name_for_pid(pid: libc::pid_t) -> Option<String> {
     let app = NSRunningApplication::runningApplicationWithProcessIdentifier(pid)?;
     app.localizedName().map(|name| name.to_string())
+}
+
+pub fn process_name(pid: libc::pid_t) -> Option<String> {
+    let mut buffer = vec![0u8; PROC_NAME_CAPACITY];
+    let len = unsafe {
+        libc::proc_name(
+            pid,
+            buffer.as_mut_ptr().cast::<c_void>(),
+            buffer.len() as u32,
+        )
+    };
+    if len <= 0 {
+        return None;
+    }
+    buffer.truncate(len as usize);
+    Some(String::from_utf8_lossy(&buffer).into_owned())
 }
 
 // ---- Credentials ----
